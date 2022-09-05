@@ -1,0 +1,253 @@
+---
+title: "Data Mining Project"
+author: "Clayton Monroe, Farahin Choudhury"
+date: "8/14/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+```{r}
+#loading required packages
+library(tidyverse)
+library(datasets)
+library(stringr)
+library(wordcloud)
+library(RColorBrewer)
+library(wordcloud2)
+library(tm)
+library(ggplot2)
+
+```
+
+
+```{r}
+# Importing Data ###############################################################
+getwd() #Verifying Working Directory
+
+#read dataset in
+reviews <- read_csv("Hotel_Reviews.csv") #Reading CSV in as a tibble
+
+#Inspecting Tibble
+str(reviews)
+summary(reviews)
+head(reviews)
+view(reviews)
+
+
+```
+
+
+```{r}
+#selecting one hotel for focused analysis
+HotelArena <- subset(reviews, reviews$Hotel_Address == "s Gravesandestraat 55 Oost 1092 AA Amsterdam Netherlands")
+
+#creating corpus of negative reviews for Hotel Arena 
+
+negHA <- HotelArena$Negative_Review
+negHAsource <- VectorSource(negHA)
+negHAcorpus <- VCorpus(negHAsource)
+negHAcorpus <- tm_map(negHAcorpus, content_transformer(tolower))
+negHAcorpus <- tm_map(negHAcorpus, removePunctuation)
+negHAcorpus <- tm_map(negHAcorpus, removeWords, stopwords())
+negHAcorpus <-tm_map(negHAcorpus, removeWords, c("positive", "hotel", "also", "amsterdam", "really", "very", "good", "great", "amazing", "nice", "well", "excellent", "getting", "going", "enough", "awesome", "incredible", "negative"))
+ 
+#creating corpus of positive reviews
+posHA <- HotelArena$Positive_Review
+posHAsource <- VectorSource(posHA)
+posHAcorpus <- VCorpus(posHAsource)
+posHAcorpus <- tm_map(posHAcorpus, content_transformer(tolower))
+posHAcorpus <- tm_map(posHAcorpus, removePunctuation)
+posHAcorpus <- tm_map(posHAcorpus, removeWords, stopwords())
+posHAcorpus <-tm_map(posHAcorpus, removeWords, c("positive", "hotel", "also", "amsterdam", "really", "very", "good", "great", "amazing", "nice", "well", "excellent", "getting", "going", "enough", "awesome", "incredible"))
+
+#converting corpuses into DTM's for further analysis
+negHA_dtm <- DocumentTermMatrix(negHAcorpus)
+negHA_frequency <- sort(colSums(as.matrix(negHA_dtm)), decreasing=T)
+dfnegHA_freq <- data.frame(word = names(negHA_frequency), freq= negHA_frequency)
+
+posHA_dtm <- DocumentTermMatrix(posHAcorpus)
+posHA_frequency <- sort(colSums(as.matrix(posHA_dtm)), decreasing=T)
+dfposHA_freq <- data.frame(word = names(posHA_frequency), freq= posHA_frequency)
+
+#positive review wordcloud
+wordcloud(dfposHA_freq$word, dfposHA_freq$freq)
+
+#negative review wordcloud
+wordcloud(dfnegHA_freq$word, dfnegHA_freq$freq)
+
+#creating new column in Hotel Arena DF which merges positive and negative reviews for further analysis
+body <- HotelArena$Body
+bodycorp <- VCorpus(VectorSource(body))
+bodycorp <- tm_map(bodycorp, content_transformer(tolower))
+bodycorp <- tm_map(bodycorp, removePunctuation)
+bodycorp <- tm_map(bodycorp, removeWords, stopwords())
+bodycorp <-tm_map(bodycorp, removeWords, c("positive", "hotel", "also", "amsterdam", "really", "very", "good", "great", "amazing", "nice", "well", "excellent", "getting", "going", "enough", "awesome", "incredible", "negative"))
+
+body_dtm <- DocumentTermMatrix(bodycorp)
+dense_body <- removeSparseTerms(body_dtm, 0.95)
+dense_body_freq <- sort(colSums(as.matrix(dense_body)), decreasing=T)
+#dense_body_freq
+
+bodydf <- data.frame(word=names(dense_body_freq), freq=dense_body_freq)
+#bodydf
+
+#Finding word frequency and plotting
+frequency_plotbody <- ggplot(subset(bodydf, freq>1), aes(x=reorder(word, -freq), y=freq)) + geom_bar(stat="identity", fill="blue") + theme(axis.text.x=element_text(angle=90, hjust=1))
+frequency_plotbody
+
+body_tfidf <- DocumentTermMatrix(bodycorp, control = list(weighting=weightTfIdf))
+dense_clustering <- removeSparseTerms(body_tfidf, 0.95)
+
+#K means clustering
+set.seed(100)
+bodyclusters <- kmeans(dense_clustering,6)
+HotelArena1 <- HotelArena
+HotelArena1$cluster <- bodyclusters$cluster
+
+HotelArenaCluster1 <- subset(HotelArena1, HotelArena1$cluster == 1)
+HotelArenaCluster2 <- subset(HotelArena1, HotelArena1$cluster == 2)
+HotelArenaCluster3 <- subset(HotelArena1, HotelArena1$cluster == 3)
+HotelArenaCluster4 <- subset(HotelArena1, HotelArena1$cluster == 4)
+HotelArenaCluster5 <- subset(HotelArena1, HotelArena1$cluster == 5)
+HotelArenaCluster6 <- subset(HotelArena1, HotelArena1$cluster == 6)
+view(HotelArenaCluster1)
+
+#descriptive stats for each cluster
+mean(HotelArenaCluster1$Average_Score)
+mean(HotelArenaCluster1$Review_Total_Negative_Word_Counts)
+mean(HotelArenaCluster1$Review_Total_Positive_Word_Counts)
+mean(HotelArenaCluster1$Total_Number_of_Reviews_Reviewer_Has_Given)
+mean(HotelArenaCluster1$Reviewer_Score)
+
+mean(HotelArenaCluster2$Average_Score)
+mean(HotelArenaCluster2$Review_Total_Negative_Word_Counts)
+mean(HotelArenaCluster2$Review_Total_Positive_Word_Counts)
+mean(HotelArenaCluster2$Total_Number_of_Reviews_Reviewer_Has_Given)
+mean(HotelArenaCluster2$Reviewer_Score)
+
+mean(HotelArenaCluster3$Average_Score)
+mean(HotelArenaCluster3$Review_Total_Negative_Word_Counts)
+mean(HotelArenaCluster3$Review_Total_Positive_Word_Counts)
+mean(HotelArenaCluster3$Total_Number_of_Reviews_Reviewer_Has_Given)
+mean(HotelArenaCluster3$Reviewer_Score)
+
+mean(HotelArenaCluster4$Average_Score)
+mean(HotelArenaCluster4$Review_Total_Negative_Word_Counts)
+mean(HotelArenaCluster4$Review_Total_Positive_Word_Counts)
+mean(HotelArenaCluster4$Total_Number_of_Reviews_Reviewer_Has_Given)
+mean(HotelArenaCluster4$Reviewer_Score)
+
+mean(HotelArenaCluster5$Average_Score)
+mean(HotelArenaCluster5$Review_Total_Negative_Word_Counts)
+mean(HotelArenaCluster5$Review_Total_Positive_Word_Counts)
+mean(HotelArenaCluster5$Total_Number_of_Reviews_Reviewer_Has_Given)
+mean(HotelArenaCluster5$Reviewer_Score)
+
+
+mean(HotelArenaCluster6$Average_Score)
+mean(HotelArenaCluster6$Review_Total_Negative_Word_Counts)
+mean(HotelArenaCluster6$Review_Total_Positive_Word_Counts)
+mean(HotelArenaCluster6$Total_Number_of_Reviews_Reviewer_Has_Given)
+mean(HotelArenaCluster6$Reviewer_Score)
+
+
+
+```
+
+
+```{r}
+#Clustering Attempt
+
+nDocs(posHA_dtm)
+nTerms(posHA_dtm)
+findFreqTerms(posHA_dtm,5)
+findFreqTerms(posHA_dtm,10)
+
+dense_posHA_dtm <- removeSparseTerms(posHA_dtm, 0.97)
+nTerms(dense_posHA_dtm)
+Terms(dense_posHA_dtm)
+dense_posHA_dtm_freq <- sort(colSums(as.matrix(dense_posHA_dtm)), decreasing = T)
+dense_posHA_dtm_freq
+
+posHAdf <- data.frame(word=names(dense_posHA_dtm_freq), freq=dense_posHA_dtm_freq)
+posHAdf
+
+frequency_plot <- ggplot(subset(posHAdf, freq>1), aes(x = reorder(word, -freq), y = freq)) + geom_bar(stat= "identity", fill = "blue") + theme(axis.text.x=element_text(angle=90, hjust =1))
+
+frequency_plot
+
+#Generating TF-IDF
+posha_tfidf <- DocumentTermMatrix(posHAcorpus, control = list(weighting=weightTfIdf))
+
+inspect(posha_tfidf)
+
+dense_clusteringpos <- removeSparseTerms(posha_tfidf, 0.97)
+
+#K-Means
+set.seed(100)
+
+HotelArena$Body <- paste(HotelArena$Negative_Review, HotelArena$Positive_Review, sep=" ")
+bodysource <- VectorSource(HotelArena$Body)
+bodycorp <- VCorpus(bodysource)
+bodycorp <- tm_map(bodycorp, content_transformer(tolower))
+bodycorp <- tm_map(bodycorp, removePunctuation)
+bodycorp <- tm_map(bodycorp, removeWords, stopwords("English"))
+bodycorp <-tm_map(bodycorp, removeWords, c("positive", "hotel", "also", "amsterdam", "really", "very", "good", "great", "amazing", "nice", "well", "excellent", "getting", "going", "enough", "awesome", "incredible", "no", "nothing", "negative"))
+body_dtm <- DocumentTermMatrix(bodycorp)
+body_frequency <- sort(colSums(as.matrix(body_dtm)), decreasing=T)
+df_body_freq <- data.frame(word = names(body_frequency), freq= body_frequency)
+
+```
+
+
+```{r}
+#association rules attempt
+library(arules)
+install.packages("arulesViz")
+library(arulesViz)
+
+fullbody <- HotelArena$Body
+transactions <- data.frame(HotelArena$Body)
+dir.create(path="tmp", showWarnings=F)
+write.csv(transactions, "./tmp/tall_transactions.csv")
+
+order_trans <- read.transactions(file = "./tmp/tall_transactions.csv", format="basket", sep = ",", rm.duplicates=F)
+summary(order_trans)
+  
+arm <- arules::apriori(order_trans, parameter= list(support=.2, confidence=.2, minlen=2))
+inspect(arm)
+SortedRules <- sort(arm, by="confidence", decreasing=T)
+inspect(SortedRules)
+```
+
+
+```{r}
+library(igraph)
+library(tidytext)
+library(widyr)
+library(NLP)
+library(data.table)
+library(rJava)
+library(RWeka)
+library(SnowballC)
+
+posHAcorpus <- tm_map(posHAcorpus, stripWhitespace)
+posHAcorpus <- tm_map(posHAcorpus, PlainTextDocument)
+
+
+#Bigram tokenizer
+BigramTokenizer <- function(x) {
+  NGramTokenizer(x, Weka_control(min =2, max = 2))
+}
+
+dtm_bigrams <- DocumentTermMatrix(negHAcorpus, control = list(tokenize = BigramTokenizer))
+
+
+
+
+```
+
+
+
